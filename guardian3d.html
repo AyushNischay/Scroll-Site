@@ -227,6 +227,60 @@
     box-shadow: 0 0 8px var(--red);
     transform: scale(1.4);
   }
+
+  /* ── CHARACTER ANIMATION ── */
+  .char {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(30px);
+    will-change: transform, opacity;
+  }
+  .char.space { width: 0.3em; }
+
+  /* ── TYPEWRITER CURSOR ── */
+  .tw-cursor {
+    display: inline-block;
+    width: 7px; height: 13px;
+    background: var(--green);
+    vertical-align: middle;
+    margin-left: 2px;
+    animation: cursor-blink 0.5s step-end infinite;
+  }
+  @keyframes cursor-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  /* ── LINE REVEAL ── */
+  .line-reveal {
+    display: block;
+    opacity: 0;
+    transform: translateY(16px);
+    will-change: transform, opacity;
+  }
+
+  /* ── SCENE 7 TEXT — ALL FIRE ── */
+  #text-allfire {
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .allfire-title {
+    font-family: var(--font-display);
+    font-size: clamp(36px, 5vw, 64px);
+    letter-spacing: 4px;
+    line-height: 1.1;
+    margin-bottom: 20px;
+  }
+  .allfire-title span { color: var(--red); }
+  .allfire-sub {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 4px;
+    color: var(--off);
+    text-transform: uppercase;
+  }
+
+  /* ── SCENE TEXT ENHANCED ── */
+  .scene-text {
+    will-change: opacity, transform, filter;
+  }
 </style>
 </head>
 <body>
@@ -296,6 +350,12 @@
       we are asking for <em>version 1 to exist.</em> And it does."
     </div>
     <div class="closing-team">Team Source Coders · SRMIST Kattankulathur · 2026</div>
+  </div>
+
+  <!-- All Fire -->
+  <div class="scene-text" id="text-allfire">
+    <div class="allfire-title">ALL SYSTEMS RESPOND<br>IN UNDER <span>1 SECOND.</span></div>
+    <div class="allfire-sub">MQ-3 → ARDUINO → RELAY + BUZZER + SERVO + LCD</div>
   </div>
 
 </div>
@@ -691,6 +751,77 @@ Object.entries(compLights).forEach(([key, light]) => {
 });
 
 // ═══════════════════════════════════════
+// TEXT ANIMATION HELPERS
+// ═══════════════════════════════════════
+
+let sceneTimeline = null;
+let activeTypewriters = [];
+let lastStepNum = '';
+let cameraLerp = 0.06;
+
+function splitToChars(el, text) {
+  el.innerHTML = '';
+  const lines = text.split('\n');
+  lines.forEach((line, li) => {
+    for (let i = 0; i < line.length; i++) {
+      const span = document.createElement('span');
+      span.className = 'char' + (line[i] === ' ' ? ' space' : '');
+      span.textContent = line[i] === ' ' ? '\u00A0' : line[i];
+      el.appendChild(span);
+    }
+    if (li < lines.length - 1) el.appendChild(document.createElement('br'));
+  });
+}
+
+function splitToLines(el, text) {
+  const sentences = text.match(/[^.!]+[.!]+\s*/g) || [text];
+  el.innerHTML = '';
+  sentences.forEach(s => {
+    const line = document.createElement('span');
+    line.className = 'line-reveal';
+    line.textContent = s.trim();
+    el.appendChild(line);
+  });
+}
+
+function killTypewriters() {
+  activeTypewriters.forEach(id => clearInterval(id));
+  activeTypewriters = [];
+}
+
+function typewriterSpec(container, specs, color, baseDelay) {
+  container.innerHTML = '';
+  specs.forEach(([key, val], i) => {
+    const div = document.createElement('div');
+    div.className = 'comp-spec-line';
+    div.style.opacity = '0';
+    container.appendChild(div);
+    setTimeout(() => {
+      div.style.opacity = '1';
+      div.textContent = key + ' ';
+      const valSpan = document.createElement('span');
+      valSpan.style.color = color;
+      div.appendChild(valSpan);
+      const cursor = document.createElement('span');
+      cursor.className = 'tw-cursor';
+      cursor.style.background = color;
+      valSpan.appendChild(cursor);
+      let ci = 0;
+      const tw = setInterval(() => {
+        if (ci < val.length) {
+          valSpan.insertBefore(document.createTextNode(val[ci]), cursor);
+          ci++;
+        } else {
+          clearInterval(tw);
+          setTimeout(() => cursor.remove(), 800);
+        }
+      }, 35);
+      activeTypewriters.push(tw);
+    }, baseDelay + i * 350);
+  });
+}
+
+// ═══════════════════════════════════════
 // CAMERA KEYFRAMES
 // ═══════════════════════════════════════
 
@@ -823,7 +954,6 @@ ScrollTrigger.create({
     scrollProgress = self.progress;
     document.getElementById('progress').style.width = (self.progress * 100) + '%';
 
-    // Map progress to stop index
     const totalStops = cameraStops.length - 1;
     const rawIdx = self.progress * totalStops;
     const stopIdx = Math.floor(rawIdx);
@@ -841,11 +971,15 @@ ScrollTrigger.create({
     lookTarget.y = stopA.look.y + (stopB.look.y - stopA.look.y) * t;
     lookTarget.z = stopA.look.z + (stopB.look.z - stopA.look.z) * t;
 
+    // Variable camera easing: fast during transitions, slow when settled
+    const transitionIntensity = 1 - Math.sin(t * Math.PI);
+    cameraLerp = 0.035 + transitionIntensity * 0.055;
+
     // Update UI based on current scene
     const newIdx = Math.round(rawIdx);
     if (newIdx !== currentStopIdx) {
       currentStopIdx = newIdx;
-      updateSceneUI(currentStopIdx, t);
+      updateSceneUI(currentStopIdx);
     }
   }
 });
@@ -858,78 +992,177 @@ const textHero      = document.getElementById('text-hero');
 const textComponent = document.getElementById('text-component');
 const textStepnum   = document.getElementById('text-stepnum');
 const textClosing   = document.getElementById('text-closing');
+const textAllfire   = document.getElementById('text-allfire');
 const scrollHint    = document.getElementById('scroll-hint');
 const navLogo       = document.getElementById('nav-logo');
 const navStatus     = document.getElementById('nav-status');
 const stepDots      = document.getElementById('step-dots');
 const dots          = document.querySelectorAll('.step-dot');
 
-function fadeIn(el)  { el.style.transition='opacity .6s ease'; el.style.opacity='1'; }
-function fadeOut(el) { el.style.transition='opacity .4s ease'; el.style.opacity='0'; }
+const allPanels = [textHero, textComponent, textStepnum, textClosing, textAllfire];
+let isFirstScene = true;
 
-function updateSceneUI(idx, t) {
-  const stop = cameraStops[Math.min(idx, cameraStops.length-1)];
+function updateSceneUI(idx) {
+  const stop = cameraStops[Math.min(idx, cameraStops.length - 1)];
 
-  // Nav
   navLogo.classList.add('show');
   navStatus.classList.add('show');
 
-  // Hide all text
-  fadeOut(textHero);
-  fadeOut(textComponent);
-  fadeOut(textStepnum);
-  fadeOut(textClosing);
+  // Kill previous animations
+  if (sceneTimeline) sceneTimeline.kill();
+  killTypewriters();
+  sceneTimeline = gsap.timeline();
 
-  // Scene 0: Hero
+  // Exit animation for all visible panels (blur + drift up)
+  const exitDur = isFirstScene ? 0 : 0.35;
+  if (!isFirstScene) {
+    allPanels.forEach(el => {
+      sceneTimeline.to(el, {
+        opacity: 0, y: -15, filter: 'blur(3px)',
+        duration: 0.3, ease: 'power2.in'
+      }, 0);
+    });
+    sceneTimeline.call(() => {
+      allPanels.forEach(el => gsap.set(el, { y: 0, filter: 'blur(0px)' }));
+    }, [], exitDur);
+  }
+  isFirstScene = false;
+
+  // ── Scene 0: Hero ──
   if (idx === 0) {
-    fadeIn(textHero);
     scrollHint.classList.add('show');
     stepDots.classList.remove('show');
-    // All components dim
-    Object.values(compLights).forEach(l => gsap.to(l, {intensity:0, duration:0.5}));
+    Object.values(compLights).forEach(l => gsap.to(l, { intensity: 0, duration: 0.5 }));
     boardGroup.rotation.y = 0;
+
+    const heroTitle = document.querySelector('.hero-title');
+    const heroEyebrow = document.querySelector('.hero-eyebrow');
+    const heroSub = document.querySelector('.hero-sub');
+
+    // Rebuild hero title with char split
+    heroTitle.innerHTML = '';
+    const guardText = 'GUARD';
+    const ianText = 'IAN';
+    for (let i = 0; i < guardText.length; i++) {
+      const s = document.createElement('span');
+      s.className = 'char';
+      s.textContent = guardText[i];
+      heroTitle.appendChild(s);
+    }
+    const redSpan = document.createElement('span');
+    redSpan.style.color = 'var(--red)';
+    for (let i = 0; i < ianText.length; i++) {
+      const s = document.createElement('span');
+      s.className = 'char';
+      s.textContent = ianText[i];
+      redSpan.appendChild(s);
+    }
+    heroTitle.appendChild(redSpan);
+
+    sceneTimeline.set(textHero, { opacity: 1 }, exitDur);
+    sceneTimeline.fromTo(heroEyebrow,
+      { opacity: 0, y: -10 },
+      { opacity: 1, y: 0, duration: 0.5 },
+      exitDur + 0.1
+    );
+    const allChars = heroTitle.querySelectorAll('.char');
+    sceneTimeline.fromTo(allChars,
+      { opacity: 0, y: 40, rotateX: -50 },
+      { opacity: 1, y: 0, rotateX: 0, duration: 0.6, stagger: 0.04, ease: 'back.out(1.7)' },
+      exitDur + 0.25
+    );
+    sceneTimeline.fromTo(heroSub,
+      { opacity: 0, y: 15 },
+      { opacity: 1, y: 0, duration: 0.5 },
+      exitDur + 0.7
+    );
   }
 
-  // Scenes 1-6: Component close-ups
+  // ── Scenes 1-6: Component close-ups ──
   else if (idx >= 1 && idx <= 6) {
     scrollHint.classList.remove('show');
     stepDots.classList.add('show');
 
-    const stop = cameraStops[idx];
-    if (stop.label) {
-      setTimeout(() => {
-        document.getElementById('comp-eyebrow').textContent = '— ' + stop.label.eyebrow.replace(/^\d+ — /, '');
-        document.getElementById('comp-eyebrow').style.color = stop.label.color;
-        document.getElementById('comp-eyebrow').style.setProperty('--before-bg', stop.label.color);
-        document.getElementById('comp-title').textContent = stop.label.title;
-        document.getElementById('comp-body').textContent = stop.label.body;
+    const stopData = cameraStops[idx];
+    if (stopData.label) {
+      const eyebrow = document.getElementById('comp-eyebrow');
+      const title = document.getElementById('comp-title');
+      const body = document.getElementById('comp-body');
+      const spec = document.getElementById('comp-spec');
+      const stepnum = document.getElementById('text-stepnum');
 
-        const specEl = document.getElementById('comp-spec');
-        specEl.innerHTML = stop.label.spec.map(([k,v]) =>
-          `<div class="comp-spec-line">${k} <span style="color:${stop.label.color}">${v}</span></div>`
-        ).join('');
+      // Set content
+      eyebrow.textContent = '\u2014 ' + stopData.label.eyebrow.replace(/^\d+ \u2014 /, '');
+      eyebrow.style.color = stopData.label.color;
 
-        document.getElementById('text-stepnum').textContent = stop.label.num;
-        fadeIn(textComponent);
-        fadeIn(textStepnum);
-      }, 300);
+      // Split title into chars
+      splitToChars(title, stopData.label.title);
+
+      // Split body into lines
+      splitToLines(body, stopData.label.body);
+
+      // Make panels visible but elements hidden
+      sceneTimeline.set(textComponent, { opacity: 1 }, exitDur);
+      sceneTimeline.set(textStepnum, { opacity: 1 }, exitDur);
+
+      // 1. Eyebrow slides in from left
+      sceneTimeline.fromTo(eyebrow,
+        { opacity: 0, x: -20 },
+        { opacity: 1, x: 0, duration: 0.4, ease: 'power2.out' },
+        exitDur + 0.15
+      );
+
+      // 2. Title chars stagger in
+      const chars = title.querySelectorAll('.char');
+      sceneTimeline.fromTo(chars,
+        { opacity: 0, y: 30, rotateX: -40 },
+        { opacity: 1, y: 0, rotateX: 0, duration: 0.5, stagger: 0.03, ease: 'back.out(1.7)' },
+        exitDur + 0.35
+      );
+
+      // 3. Body lines stagger in
+      const lines = body.querySelectorAll('.line-reveal');
+      sceneTimeline.fromTo(lines,
+        { opacity: 0, y: 16 },
+        { opacity: 1, y: 0, duration: 0.5, stagger: 0.12, ease: 'power2.out' },
+        exitDur + 0.7
+      );
+
+      // 4. Step number digit-roll
+      const oldNum = lastStepNum;
+      lastStepNum = stopData.label.num;
+      if (oldNum) {
+        sceneTimeline.to(stepnum, { y: -40, opacity: 0, duration: 0.2, ease: 'power2.in' }, exitDur + 0.1);
+      }
+      sceneTimeline.call(() => { stepnum.textContent = stopData.label.num; }, [],
+        exitDur + (oldNum ? 0.35 : 0.1));
+      sceneTimeline.fromTo(stepnum,
+        { y: 40 },
+        { y: 0, opacity: 1, duration: 0.4, ease: 'back.out(1.5)' },
+        exitDur + (oldNum ? 0.4 : 0.15)
+      );
+
+      // 5. Typewriter specs
+      sceneTimeline.call(() => {
+        typewriterSpec(spec, stopData.label.spec, stopData.label.color, 0);
+      }, [], exitDur + 1.0);
 
       // Dot indicators
-      dots.forEach((d,i) => {
-        d.classList.toggle('active', i === idx-1);
-        if (i === idx-1) d.style.background = stop.label.color;
+      dots.forEach((d, i) => {
+        d.classList.toggle('active', i === idx - 1);
+        if (i === idx - 1) d.style.background = stopData.label.color;
         else d.style.background = '';
       });
     }
 
-    // Glow the active component
+    // Glow active component
     Object.entries(compLights).forEach(([key, light]) => {
-      const isActive = stop.comp === key;
+      const isActive = stopData.comp === key;
       gsap.to(light, { intensity: isActive ? 3 : 0, duration: 0.6 });
     });
 
-    // LCD alert state
-    if (stop.comp === 'lcd' && components.lcdScreen) {
+    // LCD state
+    if (stopData.comp === 'lcd' && components.lcdScreen) {
       setTimeout(() => {
         gsap.to(components.lcdScreen.material, { emissiveIntensity: 0, duration: 0.3, onComplete: () => {
           components.lcdScreen.material.color.setHex(0xaa0000);
@@ -944,35 +1177,60 @@ function updateSceneUI(idx, t) {
     }
   }
 
-  // Scene 7: All fire
+  // ── Scene 7: All fire ──
   else if (idx === 7) {
     stepDots.classList.remove('show');
-    Object.values(compLights).forEach(l => gsap.to(l, {intensity:2.5, duration:0.3}));
-    // Pulse all lights
+    Object.values(compLights).forEach(l => gsap.to(l, { intensity: 2.5, duration: 0.3 }));
     Object.values(compLights).forEach(l => {
-      gsap.to(l, {intensity:0.5, duration:0.4, repeat:3, yoyo:true, delay:0.3,
-        onComplete:() => gsap.to(l, {intensity:2, duration:0.5})
+      gsap.to(l, { intensity: 0.5, duration: 0.4, repeat: 3, yoyo: true, delay: 0.3,
+        onComplete: () => gsap.to(l, { intensity: 2, duration: 0.5 })
       });
     });
-    // Relay LED turns red
-    if(components.relayLed) {
-      gsap.to(components.relayLed.material, {emissiveIntensity:0, duration:0.2, onComplete:()=>{
+    if (components.relayLed) {
+      gsap.to(components.relayLed.material, { emissiveIntensity: 0, duration: 0.2, onComplete: () => {
         components.relayLed.material.color.setHex(0xE63946);
         components.relayLed.material.emissive.setHex(0xE63946);
-        gsap.to(components.relayLed.material, {emissiveIntensity:1, duration:0.3});
+        gsap.to(components.relayLed.material, { emissiveIntensity: 1, duration: 0.3 });
       }});
     }
-    // LCD to red
-    if(components.lcdScreen) {
+    if (components.lcdScreen) {
       components.lcdScreen.material.color.setHex(0xaa0000);
       components.lcdScreen.material.emissive.setHex(0x440000);
     }
+
+    // Allfire text entrance
+    const allTitle = document.querySelector('.allfire-title');
+    const allSub = document.querySelector('.allfire-sub');
+    sceneTimeline.set(textAllfire, { opacity: 1 }, exitDur);
+    sceneTimeline.fromTo(allTitle,
+      { opacity: 0, scale: 0.85, y: 20 },
+      { opacity: 1, scale: 1, y: 0, duration: 0.7, ease: 'back.out(1.5)' },
+      exitDur + 0.4
+    );
+    sceneTimeline.fromTo(allSub,
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' },
+      exitDur + 0.9
+    );
   }
 
-  // Scene 8: Closing
+  // ── Scene 8: Closing ──
   else if (idx >= 8) {
-    Object.values(compLights).forEach(l => gsap.to(l, {intensity:0.3, duration:1}));
-    setTimeout(() => fadeIn(textClosing), 400);
+    Object.values(compLights).forEach(l => gsap.to(l, { intensity: 0.3, duration: 1 }));
+
+    const closingTitle = document.querySelector('.closing-title');
+    const closingTeam = document.querySelector('.closing-team');
+    sceneTimeline.set(textClosing, { opacity: 1 }, exitDur + 0.3);
+    sceneTimeline.fromTo(closingTitle,
+      { opacity: 0, y: 20 },
+      { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' },
+      exitDur + 0.4
+    );
+    sceneTimeline.fromTo(closingTeam,
+      { opacity: 0 },
+      { opacity: 1, duration: 0.6 },
+      exitDur + 1.0
+    );
   }
 }
 
@@ -982,11 +1240,11 @@ function updateSceneUI(idx, t) {
 setTimeout(() => {
   navLogo.classList.add('show');
   navStatus.classList.add('show');
-  fadeIn(textHero);
   scrollHint.classList.add('show');
+  updateSceneUI(0);
 
   // Slow board rotation on hero
-  gsap.to(boardGroup.rotation, {y: Math.PI * 0.08, duration:4, ease:'power2.out'});
+  gsap.to(boardGroup.rotation, { y: Math.PI * 0.08, duration: 4, ease: 'power2.out' });
 }, 600);
 
 // ═══════════════════════════════════════
@@ -999,15 +1257,15 @@ function animate() {
   requestAnimationFrame(animate);
   const elapsed = clock.getElapsedTime();
 
-  // Smooth camera follow
-  camPos.x += (camTarget.x - camPos.x) * 0.06;
-  camPos.y += (camTarget.y - camPos.y) * 0.06;
-  camPos.z += (camTarget.z - camPos.z) * 0.06;
+  // Smooth camera follow with variable easing
+  camPos.x += (camTarget.x - camPos.x) * cameraLerp;
+  camPos.y += (camTarget.y - camPos.y) * cameraLerp;
+  camPos.z += (camTarget.z - camPos.z) * cameraLerp;
   camera.position.copy(camPos);
 
-  camLook.x += (lookTarget.x - camLook.x) * 0.06;
-  camLook.y += (lookTarget.y - camLook.y) * 0.06;
-  camLook.z += (lookTarget.z - camLook.z) * 0.06;
+  camLook.x += (lookTarget.x - camLook.x) * cameraLerp;
+  camLook.y += (lookTarget.y - camLook.y) * cameraLerp;
+  camLook.z += (lookTarget.z - camLook.z) * cameraLerp;
   camera.lookAt(camLook);
 
   // Subtle idle animations
