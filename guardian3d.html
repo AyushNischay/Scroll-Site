@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GUARDIAN</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<style>
+  :root {
+    --red: #E63946;
+    --amber: #F4A261;
+    --green: #2EC4B6;
+    --blue: #4A9FD4;
+    --white: #F0EDE8;
+    --off: #6A6860;
+    --bg: #060504;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body: 'Bricolage Grotesque', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    overflow-x: hidden;
+    font-family: var(--font-body);
+    color: var(--white);
+  }
+
+  /* ── CANVAS FIXED FULL SCREEN ── */
+  #canvas-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+  canvas { display: block; width: 100% !important; height: 100% !important; }
+
+  /* ── SCROLL DRIVER — creates the scroll height ── */
+  #scroll-driver {
+    position: relative;
+    z-index: 0;
+    /* 9 scenes × 100vh each */
+    height: 900vh;
+  }
+
+  /* ── UI LAYER (above canvas) ── */
+  #ui {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* ── NAV ── */
+  #nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    padding: 24px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    pointer-events: none;
+  }
+  .nav-logo {
+    font-family: var(--font-display); font-size: 22px; letter-spacing: 5px;
+    color: var(--red); opacity: 0;
+    transition: opacity 1s;
+  }
+  .nav-logo.show { opacity: 1; }
+  .nav-dot-wrap {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 2px;
+    color: var(--off); opacity: 0; transition: opacity 1s;
+  }
+  .nav-dot-wrap.show { opacity: 1; }
+  .pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    animation: p 2s infinite; }
+  @keyframes p {
+    0%,100%{box-shadow:0 0 0 0 rgba(46,196,182,.5)}
+    50%{box-shadow:0 0 0 6px rgba(46,196,182,0)}
+  }
+
+  /* ── PROGRESS LINE ── */
+  #progress {
+    position: fixed; top: 0; left: 0; height: 2px;
+    background: var(--red); box-shadow: 0 0 8px var(--red);
+    width: 0%; z-index: 30; transition: width .1s linear;
+  }
+
+  /* ── SCROLL HINT ── */
+  #scroll-hint {
+    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+    z-index: 20; text-align: center;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 4px;
+    color: var(--off); text-transform: uppercase;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    opacity: 0; transition: opacity .6s;
+    pointer-events: none;
+  }
+  #scroll-hint.show { opacity: 1; }
+  #scroll-hint::after {
+    content: ''; width: 1px; height: 44px;
+    background: linear-gradient(to bottom, var(--off), transparent);
+    animation: drip 2s ease-in-out infinite;
+  }
+  @keyframes drip { 0%,100%{transform:scaleY(1);opacity:.6} 50%{transform:scaleY(1.3);opacity:1} }
+
+  /* ── SCENE TEXT PANELS ── */
+  .scene-text {
+    position: fixed;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .0s; /* JS controls this */
+  }
+
+  /* Hero text — center */
+  #text-hero {
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .hero-eyebrow {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 5px;
+    text-transform: uppercase; color: var(--off); margin-bottom: 20px;
+  }
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: clamp(80px, 14vw, 180px);
+    line-height: 0.85; letter-spacing: 6px;
+    color: var(--white);
+  }
+  .hero-title span { color: var(--red); }
+  .hero-sub {
+    font-size: clamp(14px, 1.8vw, 18px); font-weight: 300;
+    color: var(--off); margin-top: 28px; letter-spacing: 1px;
+  }
+
+  /* Component label — bottom left */
+  #text-component {
+    bottom: 80px; left: 64px;
+    max-width: 420px;
+  }
+  .comp-eyebrow {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 4px;
+    text-transform: uppercase; margin-bottom: 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .comp-eyebrow::before { content:''; width: 20px; height: 1px; }
+  .comp-title {
+    font-family: var(--font-display);
+    font-size: clamp(40px, 6vw, 72px);
+    letter-spacing: 2px; line-height: 0.9;
+    margin-bottom: 16px;
+  }
+  .comp-body {
+    font-size: 15px; font-weight: 300; color: var(--off);
+    line-height: 1.8; max-width: 340px;
+  }
+  .comp-spec {
+    margin-top: 16px;
+    font-family: var(--font-mono); font-size: 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .comp-spec-line { color: var(--off); }
+  .comp-spec-line span { color: var(--green); }
+
+  /* Component number — top right */
+  #text-stepnum {
+    top: 50%; right: 64px; transform: translateY(-50%);
+    font-family: var(--font-display); font-size: clamp(100px, 16vw, 200px);
+    color: rgba(255,255,255,0.04); letter-spacing: 4px;
+    line-height: 1;
+  }
+
+  /* Closing text — center */
+  #text-closing {
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center; width: 90%;
+    max-width: 900px;
+  }
+  .closing-title {
+    font-family: var(--font-display);
+    font-size: clamp(20px, 3.5vw, 42px);
+    letter-spacing: 2px; line-height: 1.25;
+    margin-bottom: 32px;
+  }
+  .closing-title em { color: var(--red); font-style: normal; }
+  .closing-team {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 3px;
+    color: var(--off); text-transform: uppercase;
+  }
+
+  /* ── SCAN LINE ── */
+  .scanline {
+    position: fixed; inset: 0; z-index: 5; pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 3px,
+      rgba(0,0,0,0.03) 3px,
+      rgba(0,0,0,0.03) 4px
+    );
+  }
+
+  /* ── VIGNETTE ── */
+  .vignette {
+    position: fixed; inset: 0; z-index: 6; pointer-events: none;
+    background: radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.7) 100%);
+  }
+
+  /* ── COMPONENT INDICATOR DOTS (right side) ── */
+  #step-dots {
+    position: fixed; right: 28px; top: 50%; transform: translateY(-50%);
+    z-index: 20; display: flex; flex-direction: column; gap: 10px;
+    opacity: 0; transition: opacity .6s;
+    pointer-events: none;
+  }
+  #step-dots.show { opacity: 1; }
+  .step-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--off2, #333); transition: all .3s;
+  }
+  .step-dot.active {
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
+    transform: scale(1.4);
+  }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div class="scanline"></div>
+<div class="vignette"></div>
+
+<!-- NAV -->
+<div id="nav">
+  <div class="nav-logo" id="nav-logo">GUARDIAN</div>
+  <div class="nav-dot-wrap" id="nav-status">
+    <div class="pulse"></div>
+    SYSTEM ACTIVE
+  </div>
+</div>
+
+<!-- SCROLL HINT -->
+<div id="scroll-hint">SCROLL</div>
+
+<!-- STEP DOTS -->
+<div id="step-dots">
+  <div class="step-dot" data-step="0"></div>
+  <div class="step-dot" data-step="1"></div>
+  <div class="step-dot" data-step="2"></div>
+  <div class="step-dot" data-step="3"></div>
+  <div class="step-dot" data-step="4"></div>
+  <div class="step-dot" data-step="5"></div>
+</div>
+
+<!-- THREE.JS CANVAS -->
+<div id="canvas-container"></div>
+
+<!-- SCROLL DRIVER -->
+<div id="scroll-driver"></div>
+
+<!-- UI TEXT PANELS -->
+<div id="ui">
+
+  <!-- Hero -->
+  <div class="scene-text" id="text-hero">
+    <div class="hero-eyebrow">HackNova 3.0 · SRMIST KTR · 2026</div>
+    <div class="hero-title">GUARD<span>IAN</span></div>
+    <div class="hero-sub">A system that stops drunk drivers.</div>
+  </div>
+
+  <!-- Component text -->
+  <div class="scene-text" id="text-component">
+    <div class="comp-eyebrow" id="comp-eyebrow">— MQ-3 SENSOR</div>
+    <div class="comp-title" id="comp-title">THE NOSE</div>
+    <div class="comp-body" id="comp-body">Mounted on the seatbelt at chest height. Reads alcohol in the driver's breath, continuously, in silence.</div>
+    <div class="comp-spec" id="comp-spec">
+      <div class="comp-spec-line">Threshold <span>&gt; 400 ppm</span></div>
+      <div class="comp-spec-line">Pin <span>A0 → Arduino</span></div>
+    </div>
+  </div>
+
+  <!-- Step number ghost -->
+  <div class="scene-text" id="text-stepnum">01</div>
+
+  <!-- Closing -->
+  <div class="scene-text" id="text-closing">
+    <div class="closing-title">
+      "99% of Indian vehicles have <em>zero protection.</em><br>
+      This relay costs ₹40. That is the cost of one life saved.<br>
+      We are not asking for perfection —<br>
+      we are asking for <em>version 1 to exist.</em> And it does."
+    </div>
+    <div class="closing-team">Team Source Coders · SRMIST Kattankulathur · 2026</div>
+  </div>
+
+</div>
+
+<script>
+gsap.registerPlugin(ScrollTrigger);
+
+// ═══════════════════════════════════════
+// THREE.JS SCENE SETUP
+// ═══════════════════════════════════════
+
+const container = document.getElementById('canvas-container');
+const W = window.innerWidth, H = window.innerHeight;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(W, H);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x060504, 0.035);
+
+const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 200);
+camera.position.set(0, 4, 12);
+camera.lookAt(0, 0, 0);
+
+// ── LIGHTS ──
+const ambient = new THREE.AmbientLight(0x111111, 1);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(5, 10, 8);
+dirLight.castShadow = true;
+scene.add(dirLight);
+
+const redLight = new THREE.PointLight(0xE63946, 2, 8);
+redLight.position.set(0, 3, 0);
+scene.add(redLight);
+
+const fillLight = new THREE.PointLight(0x4A9FD4, 1, 12);
+fillLight.position.set(-4, 2, 4);
+scene.add(fillLight);
+
+// ── MATERIALS ──
+const mat = {
+  pcb:       new THREE.MeshStandardMaterial({ color: 0x1a3a5c, roughness: 0.4, metalness: 0.3 }),
+  pcbGreen:  new THREE.MeshStandardMaterial({ color: 0x0d2a0d, roughness: 0.5, metalness: 0.2 }),
+  board:     new THREE.MeshStandardMaterial({ color: 0x1a1814, roughness: 0.8, metalness: 0.1 }),
+  gold:      new THREE.MeshStandardMaterial({ color: 0xc8a84b, roughness: 0.3, metalness: 0.9 }),
+  black:     new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.9 }),
+  darkBrown: new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.7 }),
+  sensorMesh:new THREE.MeshStandardMaterial({ color: 0x3a2010, roughness: 0.8, metalness: 0.3, wireframe: false }),
+  relay:     new THREE.MeshStandardMaterial({ color: 0x0a1a2a, roughness: 0.5, metalness: 0.4 }),
+  servo:     new THREE.MeshStandardMaterial({ color: 0x1a2a1a, roughness: 0.6, metalness: 0.2 }),
+  lcdBody:   new THREE.MeshStandardMaterial({ color: 0x0d1f0d, roughness: 0.6, metalness: 0.1 }),
+  lcdScreen: new THREE.MeshStandardMaterial({ color: 0x0a2a0a, roughness: 0.9, emissive: 0x002200, emissiveIntensity: 0.3 }),
+  buzzer:    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8, metalness: 0.5 }),
+  red:       new THREE.MeshStandardMaterial({ color: 0xE63946, roughness: 0.4, emissive: 0xE63946, emissiveIntensity: 0.3 }),
+  greenLed:  new THREE.MeshStandardMaterial({ color: 0x00ff44, roughness: 0.2, emissive: 0x00ff44, emissiveIntensity: 0.8 }),
+  amberLed:  new THREE.MeshStandardMaterial({ color: 0xF4A261, roughness: 0.3, emissive: 0xF4A261, emissiveIntensity: 0.5 }),
+  wire_r:    new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.8 }),
+  wire_b:    new THREE.MeshStandardMaterial({ color: 0x2244cc, roughness: 0.8 }),
+  wire_y:    new THREE.MeshStandardMaterial({ color: 0xccaa00, roughness: 0.8 }),
+  wire_g:    new THREE.MeshStandardMaterial({ color: 0x22aa22, roughness: 0.8 }),
+  wire_o:    new THREE.MeshStandardMaterial({ color: 0xcc6600, roughness: 0.8 }),
+};
+
+// ── HELPER: box ──
+function box(w, h, d, mat, x=0, y=0, z=0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  return m;
+}
+function cyl(rt, rb, h, seg, mat, x=0, y=0, z=0) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat);
+  m.position.set(x, y, z);
+  return m;
+}
+function sphere(r, mat, x=0, y=0, z=0) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), mat);
+  m.position.set(x, y, z);
+  return m;
+}
+
+// ── BREADBOARD ──
+const boardGroup = new THREE.Group();
+const boardBase = box(8, 0.15, 5, mat.board);
+boardBase.receiveShadow = true;
+boardGroup.add(boardBase);
+
+// Breadboard hole rows (tiny cylinders)
+for (let row = 0; row < 5; row++) {
+  for (let col = 0; col < 16; col++) {
+    const hole = cyl(0.03, 0.03, 0.04, 6, mat.black,
+      -3.5 + col * 0.45, 0.08, -1.8 + row * 0.45);
+    boardGroup.add(hole);
+  }
+}
+
+// Power rails
+const rail1 = box(7.5, 0.06, 0.12, new THREE.MeshStandardMaterial({color:0xcc0000,emissive:0x440000}), 0, 0.1, -2.2);
+const rail2 = box(7.5, 0.06, 0.12, new THREE.MeshStandardMaterial({color:0x0000cc,emissive:0x000044}), 0, 0.1, 2.2);
+boardGroup.add(rail1, rail2);
+
+scene.add(boardGroup);
+
+// ═══════════════════════════════════════
+// COMPONENTS
+// ═══════════════════════════════════════
+
+const components = {};
+
+// ── 1. ARDUINO UNO ──
+const arduino = new THREE.Group();
+arduino.name = 'arduino';
+const arduinoBody = box(2.8, 0.12, 2.0, mat.pcb);
+arduino.add(arduinoBody);
+
+// ATmega chip
+const chip = box(0.8, 0.18, 0.8, mat.black, 0.2, 0.15, 0);
+arduino.add(chip);
+// chip legs
+for(let i=0; i<4; i++) {
+  const leg = box(0.06, 0.06, 0.7, mat.gold, -0.42 + i*0.2, 0.09, 0);
+  arduino.add(leg);
+}
+
+// USB port
+const usb = box(0.5, 0.28, 0.35, new THREE.MeshStandardMaterial({color:0x444444,metalness:0.8,roughness:0.2}), -1.55, 0.2, 0.3);
+arduino.add(usb);
+
+// Power jack
+const jack = cyl(0.18, 0.18, 0.32, 12, new THREE.MeshStandardMaterial({color:0x222222,metalness:0.7}), -1.5, 0.2, -0.4);
+jack.rotation.z = Math.PI/2;
+arduino.add(jack);
+
+// Pin headers
+for(let i=0; i<10; i++) {
+  const pin = box(0.07, 0.22, 0.07, mat.gold, -1.0 + i*0.22, 0.2, -1.1);
+  arduino.add(pin);
+}
+for(let i=0; i<8; i++) {
+  const pin = box(0.07, 0.22, 0.07, mat.gold, -0.8 + i*0.22, 0.2, 1.1);
+  arduino.add(pin);
+}
+
+// Onboard LED
+const ledOn = sphere(0.06, mat.greenLed, 1.1, 0.14, -0.7);
+arduino.add(ledOn);
+
+// Crystal oscillator
+const crystal = box(0.25, 0.18, 0.12, new THREE.MeshStandardMaterial({color:0xd4a020,metalness:0.9}), -0.5, 0.15, 0.5);
+arduino.add(crystal);
+
+arduino.position.set(0, 0.14, 0);
+boardGroup.add(arduino);
+components.arduino = arduino;
+
+// ── 2. MQ-3 SENSOR ──
+const mq3 = new THREE.Group();
+mq3.name = 'mq3';
+
+const mq3Body = box(1.1, 0.1, 0.9, mat.darkBrown, 0, 0, 0);
+mq3.add(mq3Body);
+
+// Sensing element dome
+const dome = cyl(0.28, 0.28, 0.24, 16, mat.sensorMesh, 0, 0.17, 0);
+mq3.add(dome);
+const domeTop = sphere(0.28, new THREE.MeshStandardMaterial({color:0x1a0f05,roughness:0.9,metalness:0.3,wireframe:true}), 0, 0.3, 0);
+mq3.add(domeTop);
+
+// Coil rings on sensor
+for(let i=0; i<4; i++) {
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.18 + i*0.02, 0.015, 6, 20),
+    new THREE.MeshStandardMaterial({color:0x5a3a18,roughness:0.5,metalness:0.4})
+  );
+  ring.position.set(0, 0.15 + i*0.04, 0);
+  ring.rotation.x = Math.PI/2;
+  mq3.add(ring);
+}
+
+// Pins
+for(let i=0; i<4; i++) {
+  const pin = cyl(0.025, 0.025, 0.3, 6, mat.gold, -0.35 + i*0.22, -0.2, 0);
+  mq3.add(pin);
+}
+
+// Blue potentiometer (calibration screw)
+const pot = cyl(0.1, 0.1, 0.12, 8, new THREE.MeshStandardMaterial({color:0x2244aa,roughness:0.5,metalness:0.6}), 0.35, 0.12, -0.25);
+mq3.add(pot);
+
+mq3.position.set(-2.8, 0.14, -1.2);
+boardGroup.add(mq3);
+components.mq3 = mq3;
+
+// ── 3. SERVO SG90 ──
+const servo = new THREE.Group();
+servo.name = 'servo';
+
+const servoBody = box(1.5, 0.55, 0.8, mat.servo);
+servo.add(servoBody);
+
+// Motor housing bump
+const motorHump = cyl(0.28, 0.28, 0.6, 12, new THREE.MeshStandardMaterial({color:0x0d1a0d,roughness:0.7}), 0.3, 0.4, 0);
+servo.add(motorHump);
+
+// Servo horn (white cross)
+const hornCenter = cyl(0.12, 0.12, 0.08, 8, new THREE.MeshStandardMaterial({color:0xeeeeee,roughness:0.4}), 0.3, 0.65, 0);
+servo.add(hornCenter);
+const hornArm = box(0.55, 0.06, 0.1, new THREE.MeshStandardMaterial({color:0xdddddd,roughness:0.4}), 0.3, 0.65, 0);
+servo.add(hornArm);
+
+// Mounting tabs
+const tab1 = box(0.15, 0.45, 0.3, mat.servo, -0.82, 0, 0);
+const tab2 = box(0.15, 0.45, 0.3, mat.servo, 0.82, 0, 0);
+servo.add(tab1, tab2);
+
+// Wires coming out
+const wireColors = [mat.wire_b, mat.wire_r, mat.wire_o];
+wireColors.forEach((wm, i) => {
+  const wire = cyl(0.025, 0.025, 0.5, 6, wm, -0.6 + i*0.12, -0.5, 0);
+  servo.add(wire);
+});
+
+// Pipe representation
+const pipe = cyl(0.06, 0.06, 1.2, 8, new THREE.MeshStandardMaterial({color:0x2a5a2a,roughness:0.7,transparent:true,opacity:0.8}), 0.3, 0.65, 0);
+pipe.rotation.z = Math.PI/2;
+servo.add(pipe);
+
+servo.position.set(-2.6, 0.42, 1.4);
+boardGroup.add(servo);
+components.servo = servo;
+
+// ── 4. RELAY MODULE ──
+const relay = new THREE.Group();
+relay.name = 'relay';
+
+const relayBody = box(1.4, 0.5, 0.9, mat.relay);
+relay.add(relayBody);
+
+// Relay coil box
+const coilBox = box(0.6, 0.42, 0.7, new THREE.MeshStandardMaterial({color:0x060e18,roughness:0.6,metalness:0.2}), -0.2, 0.05, 0);
+relay.add(coilBox);
+// Coil lines
+for(let i=0; i<5; i++) {
+  const coilLine = box(0.52, 0.03, 0.02, new THREE.MeshStandardMaterial({color:0x1a4a7a}), -0.2, -0.15+i*0.08, 0.36);
+  relay.add(coilLine);
+}
+
+// Contact block
+const contactBlock = box(0.45, 0.38, 0.7, new THREE.MeshStandardMaterial({color:0x0d1a2a,roughness:0.5}), 0.45, 0.02, 0);
+relay.add(contactBlock);
+
+// LED indicator
+const relayLed = sphere(0.07, mat.greenLed, 0.55, 0.35, -0.25);
+relay.add(relayLed);
+components.relayLed = relayLed;
+
+// Screw terminals
+for(let i=0; i<3; i++) {
+  const screw = box(0.18, 0.28, 0.18, new THREE.MeshStandardMaterial({color:0x888888,metalness:0.8,roughness:0.2}), -0.45 + i*0.36, -0.25, 0.52);
+  relay.add(screw);
+}
+
+// Control pins
+for(let i=0; i<3; i++) {
+  const pin = cyl(0.025, 0.025, 0.25, 6, mat.gold, -0.2 + i*0.22, -0.38, -0.4);
+  relay.add(pin);
+}
+
+relay.position.set(2.8, 0.4, 1.0);
+boardGroup.add(relay);
+components.relay = relay;
+
+// ── 5. BUZZER ──
+const buzzer = new THREE.Group();
+buzzer.name = 'buzzer';
+
+const buzzerOuter = cyl(0.42, 0.42, 0.3, 24, mat.buzzer);
+buzzer.add(buzzerOuter);
+const buzzerMid = cyl(0.32, 0.32, 0.32, 24, new THREE.MeshStandardMaterial({color:0x0a0a0a,roughness:0.9}));
+buzzer.add(buzzerMid);
+const buzzerInner = cyl(0.18, 0.18, 0.34, 24, new THREE.MeshStandardMaterial({color:0x050505,roughness:1.0}));
+buzzer.add(buzzerInner);
+
+// Membrane rings
+for(let i=0; i<3; i++) {
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.1 + i*0.08, 0.012, 6, 20),
+    new THREE.MeshStandardMaterial({color:0x333333,roughness:0.8})
+  );
+  ring.position.y = 0.17;
+  buzzer.add(ring);
+}
+
+// Pins
+const pinP = cyl(0.03, 0.03, 0.28, 6, mat.gold, 0.1, -0.28, 0);
+const pinN = cyl(0.03, 0.03, 0.28, 6, mat.gold, -0.1, -0.28, 0);
+buzzer.add(pinP, pinN);
+
+buzzer.position.set(2.8, 0.28, -1.5);
+boardGroup.add(buzzer);
+components.buzzer = buzzer;
+
+// ── 6. LCD 16×2 ──
+const lcd = new THREE.Group();
+lcd.name = 'lcd';
+
+const lcdBody = box(2.4, 0.12, 1.0, mat.lcdBody);
+lcd.add(lcdBody);
+
+// Screen
+const lcdScreen = box(2.1, 0.04, 0.7, mat.lcdScreen, 0, 0.08, 0);
+lcd.add(lcdScreen);
+
+// Screen glow plane
+const screenGlow = new THREE.Mesh(
+  new THREE.PlaneGeometry(2.0, 0.6),
+  new THREE.MeshStandardMaterial({color:0x00aa33, emissive:0x003311, emissiveIntensity:1.0, transparent:true, opacity:0.6})
+);
+screenGlow.rotation.x = -Math.PI/2;
+screenGlow.position.y = 0.1;
+lcd.add(screenGlow);
+components.lcdScreen = screenGlow;
+
+// I2C module on back
+const i2c = box(0.7, 0.18, 0.5, new THREE.MeshStandardMaterial({color:0x0a1a2a,roughness:0.5,metalness:0.4}), -0.7, -0.15, 0);
+lcd.add(i2c);
+
+// Pins
+for(let i=0; i<4; i++) {
+  const pin = cyl(0.025, 0.025, 0.3, 6, mat.gold, -0.9 + i*0.2, -0.22, 0);
+  lcd.add(pin);
+}
+
+lcd.position.set(0, 0.14, 2.1);
+boardGroup.add(lcd);
+components.lcd = lcd;
+
+// ── WIRES ──
+function addWire(x1,y1,z1, x2,y2,z2, material) {
+  const dir = new THREE.Vector3(x2-x1, y2-y1, z2-z1);
+  const len = dir.length();
+  const mid = new THREE.Vector3((x1+x2)/2,(y1+y2)/2,(z1+z2)/2);
+  const wire = cyl(0.025, 0.025, len, 6, material);
+  wire.position.copy(mid);
+  wire.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+  boardGroup.add(wire);
+}
+
+addWire(-2.8,0.25,-1.2,  -1.4,0.25,-0.8,  mat.wire_y); // MQ3 to Arduino
+addWire(-2.6,0.25, 1.4,  -1.0,0.25, 0.8,  mat.wire_o); // Servo to Arduino
+addWire( 2.8,0.25, 1.0,   1.4,0.25, 0.5,  mat.wire_b); // Relay to Arduino
+addWire( 2.8,0.25,-1.5,   1.4,0.25,-0.5,  mat.wire_r); // Buzzer to Arduino
+addWire( 0.0,0.25, 2.1,   0.3,0.25, 1.1,  mat.wire_g); // LCD to Arduino
+
+// ── PARTICLE FIELD ──
+const particleCount = 800;
+const positions = new Float32Array(particleCount * 3);
+for(let i=0; i<particleCount; i++) {
+  positions[i*3]   = (Math.random()-0.5) * 60;
+  positions[i*3+1] = (Math.random()-0.5) * 40;
+  positions[i*3+2] = (Math.random()-0.5) * 60;
+}
+const particleGeo = new THREE.BufferGeometry();
+particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+const particleMat = new THREE.PointsMaterial({
+  color: 0x334455, size: 0.05, transparent: true, opacity: 0.6
+});
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// ═══════════════════════════════════════
+// COMPONENT GLOW LIGHTS
+// ═══════════════════════════════════════
+const compLights = {
+  mq3:     new THREE.PointLight(0xF4A261, 0, 3),
+  arduino: new THREE.PointLight(0x4A9FD4, 0, 4),
+  servo:   new THREE.PointLight(0x2EC4B6, 0, 3),
+  relay:   new THREE.PointLight(0xE63946, 0, 3),
+  buzzer:  new THREE.PointLight(0xE63946, 0, 3),
+  lcd:     new THREE.PointLight(0x00ff44, 0, 4),
+};
+Object.entries(compLights).forEach(([key, light]) => {
+  const comp = components[key] || boardGroup;
+  light.position.copy(comp.position || new THREE.Vector3());
+  light.position.y += 1;
+  scene.add(light);
+});
+
+// ═══════════════════════════════════════
+// CAMERA KEYFRAMES
+// ═══════════════════════════════════════
+
+// Each stop: camera position + lookAt + which component glows
+const cameraStops = [
+  // 0: Hero — wide shot, slightly above
+  {
+    pos: { x: 0, y: 6, z: 14 },
+    look: { x: 0, y: 0, z: 0 },
+    comp: null,
+    label: null,
+  },
+  // 1: MQ-3
+  {
+    pos: { x: -4.5, y: 2.5, z: 2 },
+    look: { x: -2.8, y: 0.5, z: -1.2 },
+    comp: 'mq3',
+    label: {
+      eyebrow: '01 — MQ-3 ALCOHOL SENSOR',
+      title: 'THE NOSE',
+      body: 'Taped to the seatbelt at chest height. As the driver exhales, breath flows past the sensing element. Reads alcohol concentration in parts per million — silently, continuously.',
+      spec: [['Threshold', '> 400 ppm for 10s'], ['Signal pin', 'A0 → Arduino'], ['Warmup', '60 seconds']],
+      num: '01',
+      color: '#F4A261',
+    }
+  },
+  // 2: Arduino
+  {
+    pos: { x: 1, y: 3, z: 5 },
+    look: { x: 0, y: 0, z: 0 },
+    comp: 'arduino',
+    label: {
+      eyebrow: '02 — ARDUINO UNO',
+      title: 'THE BRAIN',
+      body: 'Every wire on this board leads here. The ATmega328P reads the MQ-3 every second. When alcohol exceeds threshold for 10 sustained seconds, it fires three outputs simultaneously — no hesitation.',
+      spec: [['Processor', 'ATmega328P'], ['Decision loop', '1000ms'], ['Active pins', 'A0, 7, 8, 9, A4, A5']],
+      num: '02',
+      color: '#4A9FD4',
+    }
+  },
+  // 3: Servo
+  {
+    pos: { x: -5, y: 2, z: 3.5 },
+    look: { x: -2.6, y: 0.4, z: 1.4 },
+    comp: 'servo',
+    label: {
+      eyebrow: '03 — SERVO MOTOR SG90',
+      title: '90 DEGREES.\nENGINE OFF.',
+      body: 'The servo horn is taped to a pipe. At 0° the pipe is open — water flows — engine runs. At 90° the horn physically pinches the pipe shut. Water stops. The engine dies. Gracefully.',
+      spec: [['Normal', '0° — pipe open'], ['Alert', '90° — pipe blocked'], ['Signal', 'Pin 9 → PWM']],
+      num: '03',
+      color: '#2EC4B6',
+    }
+  },
+  // 4: Relay
+  {
+    pos: { x: 5.5, y: 2.5, z: 2.5 },
+    look: { x: 2.8, y: 0.4, z: 1.0 },
+    comp: 'relay',
+    label: {
+      eyebrow: '04 — 5V RELAY MODULE',
+      title: 'GREEN GOES\nDARK.',
+      body: 'Normally Closed logic. The green LED on the relay glows when the driver is sober — engine running. Alcohol detected: Pin 7 goes HIGH, the coil energises, NC disconnects. LED off. Engine cut.',
+      spec: [['Logic', 'Normally Closed (NC)'], ['Trigger', 'Pin 7 → HIGH'], ['External', '9V LED circuit']],
+      num: '04',
+      color: '#E63946',
+    }
+  },
+  // 5: Buzzer
+  {
+    pos: { x: 5.5, y: 2.5, z: -2 },
+    look: { x: 2.8, y: 0.3, z: -1.5 },
+    comp: 'buzzer',
+    label: {
+      eyebrow: '05 — ACTIVE BUZZER 5V',
+      title: 'ONE\nWARNING.',
+      body: 'Active buzzer. It needs no frequency from the Arduino — send power, it screams. 1000Hz tone fires the moment threshold is crossed. The driver gets one warning before the engine cuts.',
+      spec: [['Type', 'Active (self-driven)'], ['Frequency', '1000 Hz'], ['Code', 'tone(8, 1000)']],
+      num: '05',
+      color: '#E63946',
+    }
+  },
+  // 6: LCD
+  {
+    pos: { x: 0, y: 2.5, z: 5.5 },
+    look: { x: 0, y: 0.2, z: 2.1 },
+    comp: 'lcd',
+    label: {
+      eyebrow: '06 — LCD 16×2 I2C',
+      title: 'THE SYSTEM\nSPEAKS.',
+      body: 'I2C address 0x27. Displays GUARDIAN READY in green. The instant alcohol is detected, it switches to !! ALCOHOL !! / FUEL CUT OFF — blinking red. Judges see it. The driver sees it.',
+      spec: [['Normal', 'GUARDIAN READY'], ['Alert', '!! ALCOHOL !!'], ['Interface', 'I2C at 0x27']],
+      num: '06',
+      color: '#2EC4B6',
+    }
+  },
+  // 7: All fire — pull back
+  {
+    pos: { x: 0, y: 8, z: 16 },
+    look: { x: 0, y: 0, z: 0 },
+    comp: 'all',
+    label: null,
+  },
+  // 8: Closing
+  {
+    pos: { x: 0, y: 5, z: 18 },
+    look: { x: 0, y: 0, z: 0 },
+    comp: null,
+    label: null,
+  },
+];
+
+// ═══════════════════════════════════════
+// SCROLL → CAMERA
+// ═══════════════════════════════════════
+
+let scrollProgress = 0;
+let currentStopIdx = 0;
+
+// Camera state (lerp targets)
+const camTarget = { x: 0, y: 6, z: 14 };
+const lookTarget = { x: 0, y: 0, z: 0 };
+const camLook = new THREE.Vector3(0, 0, 0);
+
+ScrollTrigger.create({
+  trigger: '#scroll-driver',
+  start: 'top top',
+  end: 'bottom bottom',
+  onUpdate: self => {
+    scrollProgress = self.progress;
+    document.getElementById('progress').style.width = (self.progress * 100) + '%';
+
+    // Map progress to stop index
+    const totalStops = cameraStops.length - 1;
+    const rawIdx = self.progress * totalStops;
+    const stopIdx = Math.floor(rawIdx);
+    const t = rawIdx - stopIdx;
+
+    const stopA = cameraStops[Math.min(stopIdx, totalStops)];
+    const stopB = cameraStops[Math.min(stopIdx + 1, totalStops)];
+
+    // Lerp camera position
+    camTarget.x = stopA.pos.x + (stopB.pos.x - stopA.pos.x) * t;
+    camTarget.y = stopA.pos.y + (stopB.pos.y - stopA.pos.y) * t;
+    camTarget.z = stopA.pos.z + (stopB.pos.z - stopA.pos.z) * t;
+
+    lookTarget.x = stopA.look.x + (stopB.look.x - stopA.look.x) * t;
+    lookTarget.y = stopA.look.y + (stopB.look.y - stopA.look.y) * t;
+    lookTarget.z = stopA.look.z + (stopB.look.z - stopA.look.z) * t;
+
+    // Update UI based on current scene
+    const newIdx = Math.round(rawIdx);
+    if (newIdx !== currentStopIdx) {
+      currentStopIdx = newIdx;
+      updateSceneUI(currentStopIdx, t);
+    }
+  }
+});
+
+// ═══════════════════════════════════════
+// UI STATE MANAGEMENT
+// ═══════════════════════════════════════
+
+const textHero      = document.getElementById('text-hero');
+const textComponent = document.getElementById('text-component');
+const textStepnum   = document.getElementById('text-stepnum');
+const textClosing   = document.getElementById('text-closing');
+const scrollHint    = document.getElementById('scroll-hint');
+const navLogo       = document.getElementById('nav-logo');
+const navStatus     = document.getElementById('nav-status');
+const stepDots      = document.getElementById('step-dots');
+const dots          = document.querySelectorAll('.step-dot');
+
+function fadeIn(el)  { el.style.transition='opacity .6s ease'; el.style.opacity='1'; }
+function fadeOut(el) { el.style.transition='opacity .4s ease'; el.style.opacity='0'; }
+
+function updateSceneUI(idx, t) {
+  const stop = cameraStops[Math.min(idx, cameraStops.length-1)];
+
+  // Nav
+  navLogo.classList.add('show');
+  navStatus.classList.add('show');
+
+  // Hide all text
+  fadeOut(textHero);
+  fadeOut(textComponent);
+  fadeOut(textStepnum);
+  fadeOut(textClosing);
+
+  // Scene 0: Hero
+  if (idx === 0) {
+    fadeIn(textHero);
+    scrollHint.classList.add('show');
+    stepDots.classList.remove('show');
+    // All components dim
+    Object.values(compLights).forEach(l => gsap.to(l, {intensity:0, duration:0.5}));
+    boardGroup.rotation.y = 0;
+  }
+
+  // Scenes 1-6: Component close-ups
+  else if (idx >= 1 && idx <= 6) {
+    scrollHint.classList.remove('show');
+    stepDots.classList.add('show');
+
+    const stop = cameraStops[idx];
+    if (stop.label) {
+      setTimeout(() => {
+        document.getElementById('comp-eyebrow').textContent = '— ' + stop.label.eyebrow.replace(/^\d+ — /, '');
+        document.getElementById('comp-eyebrow').style.color = stop.label.color;
+        document.getElementById('comp-eyebrow').style.setProperty('--before-bg', stop.label.color);
+        document.getElementById('comp-title').textContent = stop.label.title;
+        document.getElementById('comp-body').textContent = stop.label.body;
+
+        const specEl = document.getElementById('comp-spec');
+        specEl.innerHTML = stop.label.spec.map(([k,v]) =>
+          `<div class="comp-spec-line">${k} <span style="color:${stop.label.color}">${v}</span></div>`
+        ).join('');
+
+        document.getElementById('text-stepnum').textContent = stop.label.num;
+        fadeIn(textComponent);
+        fadeIn(textStepnum);
+      }, 300);
+
+      // Dot indicators
+      dots.forEach((d,i) => {
+        d.classList.toggle('active', i === idx-1);
+        if (i === idx-1) d.style.background = stop.label.color;
+        else d.style.background = '';
+      });
+    }
+
+    // Glow the active component
+    Object.entries(compLights).forEach(([key, light]) => {
+      const isActive = stop.comp === key;
+      gsap.to(light, { intensity: isActive ? 3 : 0, duration: 0.6 });
+    });
+
+    // LCD alert state
+    if (stop.comp === 'lcd' && components.lcdScreen) {
+      setTimeout(() => {
+        gsap.to(components.lcdScreen.material, { emissiveIntensity: 0, duration: 0.3, onComplete: () => {
+          components.lcdScreen.material.color.setHex(0xaa0000);
+          components.lcdScreen.material.emissive.setHex(0x440000);
+          gsap.to(components.lcdScreen.material, { emissiveIntensity: 1, duration: 0.3 });
+        }});
+      }, 800);
+    } else if (components.lcdScreen) {
+      components.lcdScreen.material.color.setHex(0x00aa33);
+      components.lcdScreen.material.emissive.setHex(0x003311);
+      components.lcdScreen.material.emissiveIntensity = 1.0;
+    }
+  }
+
+  // Scene 7: All fire
+  else if (idx === 7) {
+    stepDots.classList.remove('show');
+    Object.values(compLights).forEach(l => gsap.to(l, {intensity:2.5, duration:0.3}));
+    // Pulse all lights
+    Object.values(compLights).forEach(l => {
+      gsap.to(l, {intensity:0.5, duration:0.4, repeat:3, yoyo:true, delay:0.3,
+        onComplete:() => gsap.to(l, {intensity:2, duration:0.5})
+      });
+    });
+    // Relay LED turns red
+    if(components.relayLed) {
+      gsap.to(components.relayLed.material, {emissiveIntensity:0, duration:0.2, onComplete:()=>{
+        components.relayLed.material.color.setHex(0xE63946);
+        components.relayLed.material.emissive.setHex(0xE63946);
+        gsap.to(components.relayLed.material, {emissiveIntensity:1, duration:0.3});
+      }});
+    }
+    // LCD to red
+    if(components.lcdScreen) {
+      components.lcdScreen.material.color.setHex(0xaa0000);
+      components.lcdScreen.material.emissive.setHex(0x440000);
+    }
+  }
+
+  // Scene 8: Closing
+  else if (idx >= 8) {
+    Object.values(compLights).forEach(l => gsap.to(l, {intensity:0.3, duration:1}));
+    setTimeout(() => fadeIn(textClosing), 400);
+  }
+}
+
+// ═══════════════════════════════════════
+// HERO ENTRANCE ANIMATION
+// ═══════════════════════════════════════
+setTimeout(() => {
+  navLogo.classList.add('show');
+  navStatus.classList.add('show');
+  fadeIn(textHero);
+  scrollHint.classList.add('show');
+
+  // Slow board rotation on hero
+  gsap.to(boardGroup.rotation, {y: Math.PI * 0.08, duration:4, ease:'power2.out'});
+}, 600);
+
+// ═══════════════════════════════════════
+// RENDER LOOP
+// ═══════════════════════════════════════
+const camPos = new THREE.Vector3(0, 6, 14);
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = clock.getElapsedTime();
+
+  // Smooth camera follow
+  camPos.x += (camTarget.x - camPos.x) * 0.06;
+  camPos.y += (camTarget.y - camPos.y) * 0.06;
+  camPos.z += (camTarget.z - camPos.z) * 0.06;
+  camera.position.copy(camPos);
+
+  camLook.x += (lookTarget.x - camLook.x) * 0.06;
+  camLook.y += (lookTarget.y - camLook.y) * 0.06;
+  camLook.z += (lookTarget.z - camLook.z) * 0.06;
+  camera.lookAt(camLook);
+
+  // Subtle idle animations
+  boardGroup.rotation.y += (scrollProgress < 0.05) ? 0.001 : 0;
+
+  // Particles drift
+  particles.rotation.y = elapsed * 0.01;
+  particles.rotation.x = elapsed * 0.004;
+
+  // Red light pulse
+  redLight.intensity = 1.5 + Math.sin(elapsed * 1.2) * 0.5;
+
+  // MQ-3 sensing element subtle pulse
+  if(components.mq3) {
+    components.mq3.children.forEach(c => {
+      if(c.geometry && c.geometry.type === 'CylinderGeometry') {
+        // subtle scale pulse on sensor body
+      }
+    });
+  }
+
+  // Servo horn slow rotation animation (hero state)
+  if(currentStopIdx === 0) {
+    components.servo.rotation.y = Math.sin(elapsed * 0.5) * 0.1;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// ═══════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+});
+</script>
+</body>
+</html>
